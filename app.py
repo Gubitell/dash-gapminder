@@ -3,37 +3,55 @@ import plotly.express as px
 import pandas as pd
 
 
+# ------------------------ Данные ------------------------------
+
 df = pd.read_csv(
     'https://raw.githubusercontent.com/plotly/datasets/master/gapminder_unfiltered.csv'
 )
 
-# Числовые меры
+# Числовые меры (колонки, по которым можно строить оси и радиусы)
 MEASURES = ['pop', 'lifeExp', 'gdpPercap']
 
-# Справочник названий мер
+# Справочник человекочитаемых названий мер
 MEASURE_LABELS = {
     'pop': 'Population',
     'lifeExp': 'Life Expectancy',
     'gdpPercap': 'GDP per Capita',
 }
 
-app = Dash(__name__)
+DEFAULT_YEAR = 2007
+
+
+# ----------------------- Приложение ----------------------------
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 
-# Общий стиль для графиков
 GRAPH_STYLE = {"height": "100%", "width": "100%"}
 
+# ----------------------------------------------------------------------------
+# Layout: 5 элементов управления + 4 диаграммы
+#   Controls:
+#     1) multi-country dropdown  -> линейный график (сравнение стран)
+#     2) y-axis dropdown          -> линейный график
+#     3) bubble x-axis dropdown   -> пузырьковая
+#     4) bubble y-axis dropdown   -> пузырьковая
+#     5) bubble size dropdown     -> пузырьковая
+#   Charts:
+#     A) line chart (multi-country)   -> источник года (clickData)
+#     B) bubble chart                 -> фильтруется по году
+#     C) top-15 bar chart             -> фильтруется по году
+#     D) continent pie chart          -> фильтруется по году
+# ----------------------------------------------------------------------------
 app.layout = html.Div([
     html.H1(
         children='Gapminder Interactive Dashboard',
         style={'textAlign': 'center'}
     ),
 
-    # Панель управления
+    # -------------------- Панель управления --------------------
     html.Div([
-        # Мультивыбор стран для линейного графика
+        # 1) Мультивыбор стран для линейного графика
         html.Div([
             html.Label('Countries (compare on line chart):'),
             dcc.Dropdown(
@@ -44,7 +62,7 @@ app.layout = html.Div([
             ),
         ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'}),
 
-        # Ось Y для линейного графика
+        # 2) Ось Y для линейного графика
         html.Div([
             html.Label('Y axis (line chart):'),
             dcc.Dropdown(
@@ -57,7 +75,7 @@ app.layout = html.Div([
     ], style={'padding': '10px'}),
 
     html.Div([
-        # Ось X для пузырьковой диаграммы
+        # 3) Ось X для пузырьковой диаграммы
         html.Div([
             html.Label('Bubble X axis:'),
             dcc.Dropdown(
@@ -68,7 +86,7 @@ app.layout = html.Div([
             ),
         ], style={'width': '32%', 'display': 'inline-block'}),
 
-        # Ось Y для пузырьковой диаграммы
+        # 4) Ось Y для пузырьковой диаграммы
         html.Div([
             html.Label('Bubble Y axis:'),
             dcc.Dropdown(
@@ -79,7 +97,7 @@ app.layout = html.Div([
             ),
         ], style={'width': '32%', 'display': 'inline-block'}),
 
-        # Радиус пузырьковой диаграммы
+        # 5) Радиус пузырьковой диаграммы
         html.Div([
             html.Label('Bubble size (radius):'),
             dcc.Dropdown(
@@ -91,49 +109,46 @@ app.layout = html.Div([
         ], style={'width': '32%', 'display': 'inline-block'}),
     ], style={'padding': '10px'}),
 
-    # Год — кросс-фильтр для топ-15, пирога и пузырьковой
+    # -------------------- Диаграммы --------------------
     html.Div([
-        html.Label('Year (cross-filter for top-15, pie, bubble):'),
-        dcc.Slider(
-            id='year-slider',
-            min=int(df['year'].min()),
-            max=int(df['year'].max()),
-            step=5,
-            value=2007,
-            marks={str(y): str(y) for y in range(int(df['year'].min()), int(df['year'].max()) + 1, 5)},
-            tooltip={"placement": "bottom", "always_visible": False},
-        ),
-    ], style={'padding': '10px 30px'}),
-
-    # Диаграммы
-    html.Div([
-        # Линейный график — сравнение нескольких стран
+        # A) Линейный график — сравнение нескольких стран.
+        #    Клик по точке выбирает год (кросс-фильтр).
         dcc.Graph(id='line-chart', style=GRAPH_STYLE),
     ], style={'width': '100%', 'padding': '10px'}),
 
     html.Div([
-        # Пузырьковая диаграмма
+        # B) Пузырьковая диаграмма
         html.Div([
             dcc.Graph(id='bubble-chart', style=GRAPH_STYLE),
         ], style={'width': '50%', 'display': 'inline-block'}),
 
-        # Топ-15 стран по популяции
+        # C) Топ-15 стран по популяции
         html.Div([
             dcc.Graph(id='top15-chart', style=GRAPH_STYLE),
         ], style={'width': '50%', 'display': 'inline-block'}),
     ], style={'padding': '10px'}),
 
     html.Div([
-        # Круговая диаграмма по континентам
+        # D) Круговая диаграмма по континентам
         dcc.Graph(id='continent-pie', style=GRAPH_STYLE),
     ], style={'width': '100%', 'padding': '10px'}),
 ])
 
 
 
-# Колбэки
+# ----------------- Колбэки ----------------------
 
-# Линейный график: сравнение выбранных стран по выбранной мере
+
+def _year_from_click(clickData):
+    if clickData and clickData.get('points'):
+        try:
+            return int(clickData['points'][0]['x'])
+        except (KeyError, TypeError, ValueError):
+            pass
+    return DEFAULT_YEAR
+
+
+# A) Линейный график: сравнение выбранных стран по выбранной мере
 @callback(
     Output('line-chart', 'figure'),
     Input('countries-dropdown', 'value'),
@@ -152,19 +167,23 @@ def update_line_chart(countries, yaxis):
     return fig
 
 
-# Пузырьковая диаграмма — оси и радиус выбираются пользователем, год берётся из слайдера (кросс-фильтр)
+# B) Пузырьковая диаграмма — оси и радиус выбираются пользователем,
+#    год берётся из clickData линейного графика
 @callback(
     Output('bubble-chart', 'figure'),
-    Input('year-slider', 'value'),
+    Input('line-chart', 'clickData'),
     Input('bubble-xaxis-dropdown', 'value'),
     Input('bubble-yaxis-dropdown', 'value'),
     Input('bubble-size-dropdown', 'value'),
+    prevent_initial_call=True,
 )
-def update_bubble_chart(year, xaxis, yaxis, size):
+def update_bubble_chart(clickData, xaxis, yaxis, size):
+    year = _year_from_click(clickData)
     dff = df[df.year == year]
     fig = px.scatter(
         dff, x=xaxis, y=yaxis, size=size,
         color='continent', hover_name='country',
+        custom_data=['continent'],
         size_max=55, log_x=True,
         title=f'Bubble chart for {year}',
     )
@@ -172,29 +191,35 @@ def update_bubble_chart(year, xaxis, yaxis, size):
     return fig
 
 
-# Топ-15 стран по популяции за выбранный год
+# C) Топ-15 стран по популяции за год, выбранный на линейном графике
 @callback(
     Output('top15-chart', 'figure'),
-    Input('year-slider', 'value'),
+    Input('line-chart', 'clickData'),
+    prevent_initial_call=True,
 )
-def update_top15(year):
-    dff = df[df.year == year].nlargest(15, 'pop')
+def update_top15(clickData):
+    year = _year_from_click(clickData)
+    dff = df[df.year == year]
+    top = dff.nlargest(15, 'pop').sort_values('pop', ascending=True)
     fig = px.bar(
-        dff.sort_values('pop', ascending=True),
-        x='pop', y='country', orientation='h',
-        color='continent',
+        top, x='pop', y='country', orientation='h',
         title=f'Top-15 countries by population in {year}',
     )
-    fig.update_layout(transition_duration=300)
+    fig.update_layout(
+        transition_duration=300,
+        yaxis={'categoryorder': 'total ascending'},
+    )
     return fig
 
 
-# Круговая диаграмма по континентам за выбранный год
+# D) Круговая диаграмма по континентам за год, выбранный на линейном графике
 @callback(
     Output('continent-pie', 'figure'),
-    Input('year-slider', 'value'),
+    Input('line-chart', 'clickData'),
+    prevent_initial_call=True,
 )
-def update_continent_pie(year):
+def update_continent_pie(clickData):
+    year = _year_from_click(clickData)
     dff = df[df.year == year]
     agg = dff.groupby('continent', as_index=False)['pop'].sum()
     fig = px.pie(
@@ -204,6 +229,6 @@ def update_continent_pie(year):
     fig.update_layout(transition_duration=300)
     return fig
 
-server = app.server
+# ----------------------------------------------
 if __name__ == '__main__':
     app.run(debug=True)
